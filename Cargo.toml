@@ -1,0 +1,24 @@
+[package]
+name = "archlinux-userland-fs-cmp"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.79"
+async-compression = { version = "0.4.5", features = ["gzip", "tokio", "zstd", "xz"] }
+async-stream = "0.3.5"
+async-walkdir = "1.0.0"
+caps = "0.5.5"
+clap = { version = "4.4.15", features = ["derive"] }
+env_logger = "0.10.1"
+futures = "0.3.30"
+futures-core = "0.3.30"
+futures-util = "0.3.30"
+log = "0.4.20"
+reqwest = { version = "0.11.23", features = ["stream"] }
+tar = "0.4.40"
+tokio = { version = "1.35.1", features = ["macros", "rt-multi-thread", "io-util"] }
+tokio-tar = "0.3.1"
+tokio-util = { version = "0.7.10", features = ["compat"] }
