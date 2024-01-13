@@ -15,7 +15,7 @@ Forensic tool to read all installed packages from a mounted Arch Linux drive and
 For development, you may find this command useful:
 
 ```sh
-cargo watch -s 'cargo build --release && doas target/release/archlinux-userland-fs-cmp /'
+cargo watch -- cargo run --release -- / -x /home -x /proc -x /sys # -x /var/lib/archbuild -x /nix -x /var/lib/repro ...
 ```
 
 ## Why not paccheck?

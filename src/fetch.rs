@@ -190,7 +190,13 @@ pub fn spawn_workers(event_tx: mpsc::UnboundedSender<Event>, rx: mpsc::Unbounded
                         _ => (),
                     }
                     debug!("Found path in package: {path:?} (sha256={sha256:?}");
-                    if event_tx.send(Event::TrustedHash(path, sha256)).is_err() {
+                    let Some(path) = path.strip_prefix('.') else {
+                        continue;
+                    };
+                    if event_tx
+                        .send(Event::TrustedFile(path.into(), sha256))
+                        .is_err()
+                    {
                         // shutdown worker
                         return;
                     }
