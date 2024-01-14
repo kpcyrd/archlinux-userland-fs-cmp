@@ -10,6 +10,14 @@ Forensic tool to read all installed packages from a mounted Arch Linux drive and
 - The mounted filesystem is considered untrusted and may contain malicious changes, parsers are written in memory-safe languages and files are only read, but never executed.
 - The investigating live medium can be any Linux, like Debian or NixOS.
 
+## Usage
+
+```sh
+archlinux-userland-fs-cmp /mnt -x /home
+```
+
+This expects an Arch Linux install to be mounted on `/mnt` and is going to exclude `/mnt/home` from the scan.
+
 ## Testing for development
 
 For development, you may find this command useful:

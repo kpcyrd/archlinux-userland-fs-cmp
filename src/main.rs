@@ -246,7 +246,17 @@ async fn run(args: Args) -> Result<()> {
 
     fetch::spawn_workers(event_tx.clone(), http_rx);
     pkg::spawn_list_installed(event_tx.clone(), http_tx, dbpath);
-    let excluded = args.exclude.into_iter().collect();
+    let excluded = args
+        .exclude
+        .iter()
+        .map(PathBuf::as_path)
+        .map(|mut p| {
+            while let Ok(v) = p.strip_prefix("/") {
+                p = v;
+            }
+            args.path.join(p)
+        })
+        .collect();
     let num_hash_worker = args.concurrency.unwrap_or_else(num_cpus::get);
     disk::spawn_scan(event_tx, args.path, excluded, num_hash_worker);
 
