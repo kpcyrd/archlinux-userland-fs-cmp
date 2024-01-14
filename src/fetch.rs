@@ -196,8 +196,12 @@ pub fn spawn_workers(
                         _ => (),
                     }
                     debug!("Found path in package: {path:?} (sha256={sha256:?}");
-                    if !path.starts_with("./") {
+                    let Some(path) = path.strip_prefix("./") else {
                         warn!("Found malformed path in .MTREE: {path:?}");
+                        continue;
+                    };
+                    if path.starts_with('/') {
+                        warn!("Found double-slash path in .MTREE: {path:?}");
                         continue;
                     }
                     let path = root.join(path);

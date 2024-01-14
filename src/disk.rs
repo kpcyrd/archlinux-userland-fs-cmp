@@ -17,7 +17,7 @@ pub enum HashVerify {
     Flagged(PathBuf),
 }
 
-async fn verify_file(path: &Path, sha256: &str) -> Result<()> {
+async fn verify_file(path: &Path, sha256: &str) -> Result<bool> {
     let mut file = File::open(path).await?;
     let mut hasher = Sha256::new();
 
@@ -35,9 +35,9 @@ async fn verify_file(path: &Path, sha256: &str) -> Result<()> {
     let calculated = hasher.finalize();
 
     if expected == calculated[..] {
-        Ok(())
+        Ok(true)
     } else {
-        bail!("sha256 mismatch")
+        Ok(false)
     }
 }
 
@@ -79,13 +79,18 @@ pub fn spawn_scan(
                 }
                 let Ok((path, sha256)) = rx.await else { break };
 
-                let verify = if verify_file(&path, &sha256).await.is_ok() {
-                    HashVerify::Passed(path)
-                } else {
-                    HashVerify::Flagged(path)
+                let event = match verify_file(&path, &sha256).await {
+                    Ok(verified) => Event::CompletedHashing(if verified {
+                        HashVerify::Passed(path)
+                    } else {
+                        HashVerify::Flagged(path)
+                    }),
+                    Err(err) => {
+                        Event::DiskError(anyhow!("Failed to read file from disk {path:?}: {err:#}"))
+                    }
                 };
 
-                if event_tx.send(Event::CompletedHashing(verify)).is_err() {
+                if event_tx.send(event).is_err() {
                     break;
                 }
             }

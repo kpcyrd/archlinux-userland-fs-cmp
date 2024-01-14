@@ -23,7 +23,7 @@ This expects an Arch Linux install to be mounted on `/mnt` and is going to exclu
 For development, you may find this command useful:
 
 ```sh
-cargo watch -- cargo run --release -- / -x /home -x /dev -x /proc -x /sys -x /run -x /var/cache # -x /var/lib/archbuild -x /nix -x /var/lib/repro ...
+cargo watch -- cargo run --release -- / -x /home -x /dev -x /proc -x /sys -x /run -x /var/cache -x /var/tmp # -x /var/lib/archbuild -x /nix -x /var/lib/repro ...
 ```
 
 ## Why not paccheck?
