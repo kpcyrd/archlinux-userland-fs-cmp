@@ -13,7 +13,7 @@ Forensic tool to read all installed packages from a mounted Arch Linux drive and
 ## Usage
 
 ```sh
-archlinux-userland-fs-cmp /mnt -x /home
+archlinux-userland-fs-cmp /mnt -x /home -o ~/report.txt
 ```
 
 This expects an Arch Linux install to be mounted on `/mnt` and is going to exclude `/mnt/home` from the scan.

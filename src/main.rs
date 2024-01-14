@@ -13,8 +13,11 @@ use clap::Parser;
 use colored::{Color, Colorize};
 use env_logger::Env;
 use num_format::{Locale, ToFormattedString};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::io::Write;
 use std::path::PathBuf;
+use tokio::fs::File;
+use tokio::io::{self, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::time::{self, Duration};
@@ -27,6 +30,7 @@ pub enum Event {
     TrustedFile(PathBuf, String),
     DiskFile(PathBuf),
     DiskPwd(PathBuf),
+    DiskError(Error),
     CompletedListInstalled,
     CompletedDiskScan,
     AvailableHasher(oneshot::Sender<(PathBuf, String)>),
@@ -45,13 +49,14 @@ pub struct App {
     running_list_installed: bool,
     running_disk_scan: bool,
 
-    waiting_for_data: HashSet<PathBuf>,
+    waiting_for_data: BTreeSet<PathBuf>,
     waiting_for_hasher: VecDeque<(PathBuf, String)>,
     available_hashers: VecDeque<oneshot::Sender<(PathBuf, String)>>,
 
     files_passed: u64,
-    files_flagged: u64,
+    files_flagged: BTreeSet<PathBuf>,
 
+    disk_errors: Vec<Error>,
     disk_pwd: Option<PathBuf>,
 }
 
@@ -93,6 +98,9 @@ impl App {
             Event::DiskPwd(path) => {
                 self.disk_pwd = Some(path);
             }
+            Event::DiskError(err) => {
+                self.disk_errors.push(err);
+            }
             Event::CompletedListInstalled => {
                 self.running_list_installed = false;
                 return true;
@@ -107,7 +115,9 @@ impl App {
             }
             Event::CompletedHashing(hashed) => match hashed {
                 HashVerify::Passed(_) => self.files_passed += 1,
-                HashVerify::Flagged(_) => self.files_flagged += 1,
+                HashVerify::Flagged(path) => {
+                    self.files_flagged.insert(path);
+                }
             },
         }
 
@@ -203,6 +213,7 @@ impl App {
         status.push_str(
             &self
                 .files_flagged
+                .len()
                 .to_formatted_string(&Locale::en)
                 .red()
                 .to_string(),
@@ -241,6 +252,18 @@ impl App {
 async fn run(args: Args) -> Result<()> {
     let dbpath = args.path.join(&args.dbpath);
 
+    // ensure we can correctly open the file for reporting
+    let mut writer = if let Some(path) = args.output {
+        Box::new(
+            File::create(&path)
+                .await
+                .with_context(|| anyhow!("Failed to open file: {path:?}"))?,
+        ) as Box<dyn AsyncWrite + Unpin>
+    } else {
+        Box::new(io::stdout()) as Box<dyn AsyncWrite + Unpin>
+    };
+
+    // setup scan
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
     let (http_tx, http_rx) = mpsc::unbounded_channel();
 
@@ -312,6 +335,33 @@ async fn run(args: Args) -> Result<()> {
 
     // redraw one final time
     app.redraw(args.verbose > 0);
+
+    // write report
+    let mut buf = Vec::new();
+    for path in app.waiting_for_data {
+        writeln!(buf, "[NO SHA256] {path:?}")?;
+        writer
+            .write_all(&buf)
+            .await
+            .context("Failed to write report")?;
+        buf.clear();
+    }
+    for err in app.disk_errors {
+        writeln!(buf, "[DISK ERROR] {err:#}")?;
+        writer
+            .write_all(&buf)
+            .await
+            .context("Failed to write report")?;
+        buf.clear();
+    }
+    for path in app.files_flagged {
+        writeln!(buf, "[WRONG SHA256] {path:?}")?;
+        writer
+            .write_all(&buf)
+            .await
+            .context("Failed to write report")?;
+        buf.clear();
+    }
 
     Ok(())
 }

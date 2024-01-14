@@ -16,4 +16,7 @@ pub struct Args {
     /// How many files to hash concurrently
     #[arg(short = 'n', long)]
     pub concurrency: Option<usize>,
+    /// Where to write the report to
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
 }

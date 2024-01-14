@@ -2,6 +2,7 @@ use crate::errors::*;
 use crate::Event;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
+use std::fs::FileType;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs::File;
@@ -9,7 +10,7 @@ use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::task;
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 pub enum HashVerify {
     Passed(PathBuf),
@@ -40,12 +41,34 @@ async fn verify_file(path: &Path, sha256: &str) -> Result<()> {
     }
 }
 
+pub async fn read_disk(
+    walkdir: &std::sync::Mutex<walkdir::IntoIter>,
+    entry: std::result::Result<DirEntry, walkdir::Error>,
+    excluded: &HashSet<PathBuf>,
+) -> Result<Option<(PathBuf, FileType)>> {
+    let entry = entry.context("Failed to access disk")?;
+
+    let path = entry.path().to_owned();
+    if excluded.contains(&path) {
+        let mut lock = walkdir.lock().unwrap();
+        lock.skip_current_dir();
+        return Ok(None);
+    }
+
+    let stat = task::spawn_blocking(move || entry.file_type())
+        .await
+        .with_context(|| anyhow!("Failed to stat path {path:?}"))?;
+
+    Ok(Some((path, stat)))
+}
+
 pub fn spawn_scan(
     event_tx: mpsc::UnboundedSender<Event>,
     path: PathBuf,
     excluded: HashSet<PathBuf>,
     num_hash_workers: usize,
 ) {
+    // wait for paths and their expected hash, then verify with disk content
     for _ in 0..num_hash_workers {
         let event_tx = event_tx.clone();
         tokio::spawn(async move {
@@ -69,6 +92,7 @@ pub fn spawn_scan(
         });
     }
 
+    // walk the filesystem and report to main thread
     tokio::spawn(async move {
         let walkdir = Arc::new(std::sync::Mutex::new(WalkDir::new(path).into_iter()));
 
@@ -84,35 +108,16 @@ pub fn spawn_scan(
                 break;
             };
 
-            let entry = match entry {
-                Ok(entry) => entry,
-                Err(err) => {
-                    warn!("Failed to access disk: {err:#}");
-                    continue;
+            let event = match read_disk(&walkdir, entry, &excluded).await {
+                Ok(Some((path, stat))) => {
+                    if stat.is_dir() {
+                        Event::DiskPwd(path)
+                    } else {
+                        Event::DiskFile(path)
+                    }
                 }
-            };
-
-            let path = entry.path().to_owned();
-            if excluded.contains(&path) {
-                let mut lock = walkdir.lock().unwrap();
-                lock.skip_current_dir();
-                continue;
-            }
-
-            let stat = task::spawn_blocking(move || entry.file_type()).await;
-
-            let stat = match stat {
-                Ok(stat) => stat,
-                Err(err) => {
-                    warn!("Failed to stat path {path:?}: {err:#}");
-                    continue;
-                }
-            };
-
-            let event = if stat.is_dir() {
-                Event::DiskPwd(path)
-            } else {
-                Event::DiskFile(path)
+                Ok(None) => continue,
+                Err(err) => Event::DiskError(err),
             };
 
             if event_tx.send(event).is_err() {
