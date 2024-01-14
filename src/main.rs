@@ -7,16 +7,17 @@ pub mod pkg;
 pub mod sandbox;
 
 use crate::args::Args;
+use crate::disk::HashVerify;
 use crate::errors::*;
 use clap::Parser;
 use colored::{Color, Colorize};
 use env_logger::Env;
-use num_format::{Locale, ToFormattedString, WriteFormatted};
+use num_format::{Locale, ToFormattedString};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Write;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use tokio::time::{self, Duration};
 
 const PATH_TRUNCATE: usize = 85;
@@ -29,13 +30,8 @@ pub enum Event {
     DiskPwd(PathBuf),
     CompletedListInstalled,
     CompletedDiskScan,
-    StartedHashing,
+    AvailableHasher(oneshot::Sender<(PathBuf, String)>),
     CompletedHashing(HashVerify),
-}
-
-pub enum HashVerify {
-    Passed(PathBuf),
-    Failed(PathBuf),
 }
 
 #[tokio::main]
@@ -48,7 +44,8 @@ async fn run(args: Args) -> Result<()> {
     fetch::spawn_workers(event_tx.clone(), http_rx);
     pkg::spawn_list_installed(event_tx.clone(), http_tx, dbpath);
     let excluded = args.exclude.into_iter().collect();
-    let num_hash_worker = disk::spawn_scan(event_tx, args.path, excluded);
+    let num_hash_worker = args.concurrency.unwrap_or_else(num_cpus::get);
+    disk::spawn_scan(event_tx, args.path, excluded, num_hash_worker);
 
     let mut completed_pkgs = 0;
     let mut total_pkgs = 0;
@@ -56,10 +53,10 @@ async fn run(args: Args) -> Result<()> {
 
     let mut running_list_installed = true;
     let mut running_disk_scan = true;
-    let mut running_hash_workers = 0;
 
     let mut waiting_for_data = HashSet::new();
     let mut waiting_for_hasher = VecDeque::new();
+    let mut available_hashers = VecDeque::new();
     let mut files_passed = 0;
     let mut files_flagged = 0;
 
@@ -110,8 +107,13 @@ async fn run(args: Args) -> Result<()> {
                         disk_pwd = None;
                         redraw = true;
                     }
-                    Some(Event::StartedHashing) => running_hash_workers += 1,
-                    Some(Event::CompletedHashing(_)) => running_hash_workers -= 1,
+                    Some(Event::AvailableHasher(hasher)) => {
+                        available_hashers.push_back(hasher);
+                    }
+                    Some(Event::CompletedHashing(hashed)) => match hashed {
+                        HashVerify::Passed(_) => files_passed += 1,
+                        HashVerify::Flagged(_) => files_flagged += 1,
+                    }
                     // everything has shutdown
                     None => break,
                 }
@@ -119,6 +121,23 @@ async fn run(args: Args) -> Result<()> {
             _ = interval.tick() => {
                 redraw = true;
             }
+        }
+
+        while !waiting_for_hasher.is_empty() && !available_hashers.is_empty() {
+            let hasher = available_hashers.pop_front().unwrap();
+            let task = waiting_for_hasher.pop_front().unwrap();
+            if hasher.send(task).is_err() {
+                warn!("All hashers have crashed");
+                return Ok(());
+            }
+        }
+
+        while !available_hashers.is_empty()
+            && waiting_for_hasher.is_empty()
+            && !running_disk_scan
+            && completed_pkgs == total_pkgs
+        {
+            available_hashers.pop_front();
         }
 
         if redraw {
@@ -167,10 +186,25 @@ async fn run(args: Args) -> Result<()> {
                 status.push_str("...");
             }
             status.push('/');
-            status.write_formatted(&waiting_for_hasher.len(), &Locale::en)?;
+            status.push_str(&format!(
+                "{:>7}",
+                waiting_for_hasher.len().to_formatted_string(&Locale::en)
+            ));
 
             status.push_str(&" | hashing ".bold().to_string());
-            write!(status, "[{running_hash_workers}/{num_hash_worker}]")?;
+            {
+                let running_hash_workers = num_hash_worker - available_hashers.len();
+                let s = format!("{running_hash_workers}/{num_hash_worker}");
+                let s = if running_hash_workers == num_hash_worker {
+                    s.cyan()
+                } else if running_hash_workers == 0 {
+                    s.bright_black()
+                } else {
+                    s.normal()
+                }
+                .to_string();
+                write!(status, "[{s}]")?;
+            }
 
             status.push_str(&" | passed".bold().to_string());
             status.push('=');

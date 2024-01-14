@@ -1,5 +1,4 @@
 use clap::{ArgAction, Parser};
-use std::collections::HashSet;
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -11,6 +10,10 @@ pub struct Args {
     pub path: PathBuf,
     #[arg(short = 'b', long, default_value = "var/lib/pacman")]
     pub dbpath: PathBuf,
+    /// Files and folder to exclude (won't be traversed)
     #[arg(short = 'x', long)]
     pub exclude: Vec<PathBuf>,
+    /// How many files to hash concurrently
+    #[arg(short = 'n', long)]
+    pub concurrency: Option<usize>,
 }
