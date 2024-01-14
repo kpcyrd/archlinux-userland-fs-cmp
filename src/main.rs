@@ -267,7 +267,7 @@ async fn run(args: Args) -> Result<()> {
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
     let (http_tx, http_rx) = mpsc::unbounded_channel();
 
-    fetch::spawn_workers(event_tx.clone(), http_rx);
+    fetch::spawn_workers(event_tx.clone(), http_rx, &args.path);
     pkg::spawn_list_installed(event_tx.clone(), http_tx, dbpath);
     let excluded = args
         .exclude

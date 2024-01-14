@@ -112,6 +112,9 @@ pub fn spawn_scan(
                 Ok(Some((path, stat))) => {
                     if stat.is_dir() {
                         Event::DiskPwd(path)
+                    } else if stat.is_symlink() {
+                        // ignore this for now
+                        continue;
                     } else {
                         Event::DiskFile(path)
                     }

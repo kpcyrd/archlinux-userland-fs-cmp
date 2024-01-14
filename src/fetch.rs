@@ -7,6 +7,7 @@ use async_stream::stream;
 use futures_core::stream::Stream;
 use futures_util::{pin_mut, StreamExt, TryStreamExt};
 use reqwest::StatusCode;
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Poll;
@@ -164,9 +165,14 @@ async fn fetch_trusted_hashes<'a>(
     }
 }
 
-pub fn spawn_workers(event_tx: mpsc::UnboundedSender<Event>, rx: mpsc::UnboundedReceiver<Package>) {
+pub fn spawn_workers(
+    event_tx: mpsc::UnboundedSender<Event>,
+    rx: mpsc::UnboundedReceiver<Package>,
+    root: &Path,
+) {
     let rx = Arc::new(Mutex::new(rx));
     for _ in 0..NUM_HTTP_WORKERS {
+        let root = root.to_owned();
         let rx = rx.clone();
         let event_tx = event_tx.clone();
         tokio::spawn(async move {
@@ -190,13 +196,12 @@ pub fn spawn_workers(event_tx: mpsc::UnboundedSender<Event>, rx: mpsc::Unbounded
                         _ => (),
                     }
                     debug!("Found path in package: {path:?} (sha256={sha256:?}");
-                    let Some(path) = path.strip_prefix('.') else {
+                    if !path.starts_with("./") {
+                        warn!("Found malformed path in .MTREE: {path:?}");
                         continue;
-                    };
-                    if event_tx
-                        .send(Event::TrustedFile(path.into(), sha256))
-                        .is_err()
-                    {
+                    }
+                    let path = root.join(path);
+                    if event_tx.send(Event::TrustedFile(path, sha256)).is_err() {
                         // shutdown worker
                         return;
                     }
