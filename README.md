@@ -2,6 +2,8 @@
 
 Forensic tool to read all installed packages from a mounted Arch Linux drive and compare the filesystem to a trusted source. This utilizes https://archive.archlinux.org, all files not coming from one of those packages are flagged for investigation.
 
+[![asciicast](https://asciinema.org/a/MFefYEdvU2O5LlIzseQnyBky5.svg)](https://asciinema.org/a/MFefYEdvU2O5LlIzseQnyBky5)
+
 ## Features
 
 - Not the entire package is fetched from the archive, as soon as the `.MTREE` has been received the download is aborted. This currently relies on https for security (which is considered acceptable for what it's written for), but for added security could be pointed to an ipfs folder (that has been calculated/authenticated ahead of time).
@@ -24,6 +26,12 @@ For development, you may find this command useful:
 
 ```sh
 cargo watch -- cargo run --release -- / -x /home -x /dev -x /proc -x /sys -x /run -x /var/cache -x /var/tmp # -x /var/lib/archbuild -x /nix -x /var/lib/repro ...
+```
+
+To scan a smaller system with shorter output, try:
+
+```sh
+podman run -it --rm -v "$PWD/target/x86_64-unknown-linux-musl/release/archlinux-userland-fs-cmp:/cmp:ro" archlinux /cmp / -x /sys -x /proc -x /dev -x /var/lib/pacman/local -x /etc/ca-certificates/extracted
 ```
 
 ## Why not paccheck?
