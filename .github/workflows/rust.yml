@@ -30,8 +30,39 @@ jobs:
         key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: ${{ runner.os }}-cargo-release-
 
+    - name: 🚚 Install dependencies (repro-env)
+      run: |
+        wget 'https://github.com/kpcyrd/repro-env/releases/download/v0.3.2/repro-env'
+        echo '660995089d32178a63763cf47e1b97e265ef5cf24bf646d16728ca51bf2fab50  repro-env' | sha256sum -c -
+        sudo install -m755 repro-env -t /usr/bin
+
     - name: 🛠️ Build
-      run: cargo build
+      run: make
+
+    - name: 📦 Upload binary
+      uses: actions/upload-artifact@v3
+      with:
+        name: archlinux-userland-fs-cmp
+        path: |
+          target/x86_64-unknown-linux-musl/release/archlinux-userland-fs-cmp
+
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: 🏗️ Setup build cache
+      uses: actions/cache@v3
+      continue-on-error: false
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-debug-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: ${{ runner.os }}-cargo-debug-
 
     - name: 📋 Unit tests
       run: cargo test
