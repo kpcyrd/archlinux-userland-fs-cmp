@@ -6,7 +6,7 @@ Forensic tool to read all installed packages from a mounted Arch Linux drive and
 
 ## Features
 
-- Not the entire package is fetched from the archive, as soon as the `.MTREE` has been received the download is aborted. This currently relies on https for security (which is considered acceptable for what it's written for), but for added security could be pointed to an ipfs folder (that has been calculated/authenticated ahead of time).
+- Not the entire package is fetched from the archive, as soon as the `.MTREE` has been received the download is aborted. This currently relies on https for security and some downloads are going to be redirected to archive.org (which is considered acceptable for what it's written for), but for added security could be pointed to an ipfs folder (that has been calculated/authenticated ahead of time).
 - The mounted filesystem is hashed with a thread pool.
 - The scan needs `CAP_DAC_READ_SEARCH` which usually requires root, but before accessing the mounted filesystem all unneeded kernel capabilities are removed (like `CAP_SYS_ADMIN`, `CAP_SETUID`, `CAP_DAC_OVERRIDE`, ...) and the process is then blocked from re-acquiring them.
 - The mounted filesystem is considered untrusted and may contain malicious changes, parsers are written in memory-safe languages and files are only read, but never executed.
