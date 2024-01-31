@@ -1,6 +1,11 @@
 [package]
 name = "archlinux-userland-fs-cmp"
 version = "0.1.0"
+description = "Forensic tool to read all installed packages from a mounted Arch Linux drive and compare the filesystem to a trusted source"
+authors = ["kpcyrd <git@rxv.cc>"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/kpcyrd/archlinux-userland-fs-cmp"
+categories = ["command-line-utilities"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
