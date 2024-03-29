@@ -12,6 +12,7 @@ use tokio::sync::oneshot;
 use tokio::task;
 use walkdir::{DirEntry, WalkDir};
 
+#[derive(Debug)]
 pub enum HashVerify {
     Passed(PathBuf),
     Flagged(PathBuf),

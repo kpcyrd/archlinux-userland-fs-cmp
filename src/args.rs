@@ -16,6 +16,9 @@ pub struct Args {
     /// How many files to hash concurrently
     #[arg(short = 'n', long)]
     pub concurrency: Option<usize>,
+    /// Read the pacman database and print URLs for all installed packages
+    #[arg(short = 'L', long)]
+    pub list_pkgs: bool,
     /// Where to write the report to
     #[arg(short, long)]
     pub output: Option<PathBuf>,

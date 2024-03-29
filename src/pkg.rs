@@ -16,6 +16,19 @@ pub struct Package {
     pub arch: String,
 }
 
+impl Package {
+    pub fn to_url(&self, ext: &str) -> Result<String> {
+        let Some(first) = self.name.chars().next() else {
+            bail!("Package name can't be empty")
+        };
+        let pkgname = &self.name;
+        let pkgver = &self.version;
+        let arch = &self.arch;
+        let url = format!("https://archive.archlinux.org/packages/{first}/{pkgname}/{pkgname}-{pkgver}-{arch}.pkg.tar.{ext}");
+        Ok(url)
+    }
+}
+
 pub fn list_installed(path: &Path) -> impl Stream<Item = Result<Package>> {
     let path = path.join("local");
 
