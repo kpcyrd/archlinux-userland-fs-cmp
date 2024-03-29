@@ -24,6 +24,7 @@ use tokio::time::{self, Duration};
 
 const PATH_TRUNCATE: usize = 85;
 
+#[derive(Debug)]
 pub enum Event {
     PkgQueued,
     PkgCompleted,
@@ -366,6 +367,42 @@ async fn run(args: Args) -> Result<()> {
     Ok(())
 }
 
+#[tokio::main]
+async fn list_pkgs(args: Args) -> Result<()> {
+    let dbpath = args.path.join(&args.dbpath);
+
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+    let (http_tx, mut http_rx) = mpsc::unbounded_channel();
+
+    pkg::spawn_list_installed(event_tx, http_tx, dbpath);
+
+    let client = reqwest::Client::new();
+    loop {
+        tokio::select! {
+            Some(_msg) = event_rx.recv() => (),
+            Some(pkg) = http_rx.recv() => {
+                let mut found = false;
+
+                for ext in fetch::PKG_COMPRESSION_EXTS {
+                    let Ok(url) = pkg.to_url(ext) else { continue };
+                    if fetch::head(&client, &url).await?.is_success() {
+                        println!("{url}");
+                        found = true;
+                        break;
+                    }
+                }
+
+                if !found {
+                    bail!("Failed to determine url for pkg: {pkg:?}");
+                }
+            }
+            else => break,
+        }
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -381,5 +418,9 @@ fn main() -> Result<()> {
     sandbox::init()?;
 
     // Start into tokio and regular program
-    run(args)
+    if args.list_pkgs {
+        list_pkgs(args)
+    } else {
+        run(args)
+    }
 }

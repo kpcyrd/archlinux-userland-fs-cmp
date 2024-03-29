@@ -18,6 +18,7 @@ use tokio_tar as tar;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 const NUM_HTTP_WORKERS: usize = 4;
+pub const PKG_COMPRESSION_EXTS: &[&str] = &["zst", "xz"];
 
 fn remote_tar_read_mtree<R: AsyncRead + Unpin>(
     reader: R,
@@ -85,6 +86,22 @@ impl<R: AsyncBufRead + Unpin> AsyncRead for Decompress<R> {
     }
 }
 
+pub async fn head(client: &reqwest::Client, url: &str) -> Result<StatusCode> {
+    debug!("Fetching url {url:?}");
+    let res = client
+        .head(url)
+        .send()
+        .await
+        .with_context(|| anyhow!("Failed to send http request ({url:?})"))?;
+
+    let status = res.status();
+    if status.is_success() || status == StatusCode::NOT_FOUND {
+        Ok(status)
+    } else {
+        bail!("Unexpected http status code ({url:?}): {status:?}");
+    }
+}
+
 async fn fetch_remote_mtree(
     client: &reqwest::Client,
     url: &str,
@@ -132,14 +149,10 @@ async fn fetch_trusted_hashes<'a>(
     pkg: &'a Package,
 ) -> impl Stream<Item = (String, String)> + 'a {
     stream! {
-        for ext in ["zst", "xz"] {
-            let Some(first) = pkg.name.chars().next() else {
+        for ext in PKG_COMPRESSION_EXTS {
+            let Ok(url) = pkg.to_url(ext) else {
                 continue;
             };
-            let pkgname = &pkg.name;
-            let pkgver = &pkg.version;
-            let arch = &pkg.arch;
-            let url = format!("https://archive.archlinux.org/packages/{first}/{pkgname}/{pkgname}-{pkgver}-{arch}.pkg.tar.{ext}");
 
             match fetch_remote_mtree(client, &url, ext).await {
                 Ok(Some(mtree)) => {
